@@ -2,12 +2,15 @@
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
+using System;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace DibClient
 {
     public static class DibClient
     {
+        const string DIBMD_FILE_PATH = ".dib/.dibmd";
         const string DIBRM_FILE_PATH = ".dibrm";
         const string DIBVER_FILE_PATH = ".dibver";
 
@@ -16,6 +19,20 @@ namespace DibClient
 
         static Dictionary<string, int> versionsData = new Dictionary<string, int>();
         static readonly HttpClient httpClient = new HttpClient();
+
+        [DllImport("DIBMDHandler.dll")]
+        static public extern IntPtr CreateDIBMDHandlerClass(string path);
+
+        [DllImport("DIBMDHandler.dll")]
+        static public extern int GetRepoVersion(IntPtr DIBMDHandlerObject);
+
+        //use the functions
+        static int getVersion(string appName)
+        {
+            string pathToDIBMD = DIBMD_FILE_PATH;
+            IntPtr DIBMDHandler = CreateDIBMDHandlerClass(pathToDIBMD);
+            return GetRepoVersion(DIBMDHandler);
+        }
 
         static DibClient()
         {
