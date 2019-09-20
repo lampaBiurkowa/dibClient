@@ -7,9 +7,12 @@ namespace DibClient
     {
         const char SEPARATOR = ':';
 
-        public static Dictionary<string, int> GetVersions(string path)
+        public static Dictionary<string, int> GetVersionsData(string path)
         {
             Dictionary<string, int> output = new Dictionary<string, int>();
+
+            if (!File.Exists(path))
+                return output;
 
             string[] lines = File.ReadAllLines(path);
             foreach (string line in lines)
@@ -35,7 +38,7 @@ namespace DibClient
             return output;
         }
 
-        public static void saveVersions(string path, Dictionary<string, int> versionsData)
+        public static void SaveVersionsData(string path, Dictionary<string, int> versionsData)
         {
             List<string> entries = new List<string>();
 
