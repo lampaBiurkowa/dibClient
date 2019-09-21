@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
-using System;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -10,8 +10,8 @@ namespace DibClient
 {
     public static class DibClient
     {
-        const string DIBMD_FILE_PATH = ".dib/.dibmd";
-        const string DIBRM_FILE_PATH = ".dibrm";
+        const string DIBMD_FILE_RELATIVE_PATH = ".dib/.dibmd";
+        const string DIBRM_FILE_RELATIVE_PATH = ".dibrm";
         const string DIBVER_FILE_PATH = ".dibver";
 
         const string APPS_DIRECTORY_PATH = "dibApps";
@@ -19,20 +19,6 @@ namespace DibClient
 
         static Dictionary<string, int> versionsData = new Dictionary<string, int>();
         static readonly HttpClient httpClient = new HttpClient();
-
-        [DllImport("DIBMDHandler.dll")]
-        static public extern IntPtr CreateDIBMDHandlerClass(string path);
-
-        [DllImport("DIBMDHandler.dll")]
-        static public extern int GetRepoVersion(IntPtr DIBMDHandlerObject);
-
-        //use the functions
-        static int getVersion(string appName)
-        {
-            string pathToDIBMD = DIBMD_FILE_PATH;
-            IntPtr DIBMDHandler = CreateDIBMDHandlerClass(pathToDIBMD);
-            return GetRepoVersion(DIBMDHandler);
-        }
 
         static DibClient()
         {
@@ -56,20 +42,27 @@ namespace DibClient
 
         static async Task update(string uri, string appName, bool force)
         {
+            System.Console.WriteLine(uri);
             try
             {
                 byte[] responseBody = await httpClient.GetByteArrayAsync(uri);
                 MemoryStream stream = new MemoryStream(responseBody);
                 ZipArchive zipArchive = new ZipArchive(stream);
 
+                System.Console.WriteLine("b");
                 string destinationPath = getPathToUpdatePack(appName);
                 if (Directory.Exists(destinationPath))
                     Directory.Delete(destinationPath, true);
+                System.Console.WriteLine("b2");
                 zipArchive.ExtractToDirectory(destinationPath);
+                System.Console.WriteLine("c");
 
                 stream.Dispose();
 
                 install(appName, force);
+                System.Console.WriteLine("d");
+                updateAppVersion(appName);
+                System.Console.WriteLine("e");
             }
             catch (HttpRequestException e)
             {
@@ -119,12 +112,15 @@ namespace DibClient
         {
             string[] filesToRemovePaths = File.ReadAllLines(getPathToDIBRMFile(appName));
             foreach (string path in filesToRemovePaths)
+            {
+                System.Console.WriteLine(path);
                 File.Delete($"{getPathToApp(appName)}/{path}");
+            }
         }
 
         static string getPathToDIBRMFile(string appName)
         {
-            return $"{getPathToUpdatePack(appName)}/{DIBRM_FILE_PATH}";
+            return $"{getPathToUpdatePack(appName)}/{DIBRM_FILE_RELATIVE_PATH}";
         }
 
         static void copyNecesseryFiles(string appName)
@@ -133,17 +129,48 @@ namespace DibClient
             foreach (string path in Directory.GetFiles(pathToUpdatePack, "*", SearchOption.AllDirectories))
             {
                 string relativePart = path.Replace(pathToUpdatePack, "");
-                CreateDirectoryFromPath(Path.GetFullPath(Path.GetDirectoryName($"{getPathToApp(appName)}/{relativePart}")));
-                File.Copy(path, $"{getPathToApp(appName)}/{relativePart}", true);
+                string pathInApp = $"{getPathToApp(appName)}/{relativePart}";
+                createDirectoryFromPath(Path.GetFullPath(Path.GetDirectoryName(pathInApp)));
+                File.Copy(path, pathInApp, true);
             }
         }
 
-        static void CreateDirectoryFromPath(string path)
+        static void createDirectoryFromPath(string path)
         {
             if (!Directory.Exists(Path.GetDirectoryName(path)))
-                CreateDirectoryFromPath(Path.GetDirectoryName(path));
+                createDirectoryFromPath(Path.GetDirectoryName(path));
             
             Directory.CreateDirectory(path);
         }
+
+        static void updateAppVersion(string appName)
+        {
+            int currentVersion = getVersion(appName);
+
+            if (versionsData.ContainsKey(appName))
+                versionsData[appName] = currentVersion;
+            else
+                versionsData.Add(appName, currentVersion);
+
+            DIBVERHandler.SaveVersionsData(DIBVER_FILE_PATH, versionsData);
+        }
+
+        static int getVersion(string appName)
+        {
+            string pathToDIBMD = getPathToDIBMDFile(appName);
+            IntPtr DIBMDHandler = CreateDIBMDHandlerClass(pathToDIBMD);
+            return GetRepoVersion(DIBMDHandler);
+        }
+
+        static string getPathToDIBMDFile(string appName)
+        {
+            return $"{getPathToApp(appName)}/{DIBMD_FILE_RELATIVE_PATH}";
+        }
+
+        [DllImport("DIBMDHandler.dll")]
+        static public extern IntPtr CreateDIBMDHandlerClass(string path);
+
+        [DllImport("DIBMDHandler.dll")]
+        static public extern int GetRepoVersion(IntPtr DIBMDHandlerObject);
     }
 }
