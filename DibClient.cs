@@ -12,7 +12,7 @@ namespace DibClient
     {
         const string DIB_DIRECTORY_RELATIVE_PATH = ".dib";
         const string DIBMD_FILE_RELATIVE_PATH = DIB_DIRECTORY_RELATIVE_PATH + "/.dibmd";
-        const string DIBRM_FILE_RELATIVE_PATH = ".dibrm";
+        const string DIBRM_FILE_RELATIVE_PATH = DIB_DIRECTORY_RELATIVE_PATH + "/.dibrm";
         const string DIBVER_FILE_PATH = ".dibver";
 
         const string APPS_DIRECTORY_PATH = "dibApps";
@@ -160,7 +160,6 @@ namespace DibClient
         {
             Directory.Delete(ZIPS_DIRECTORY_PATH, true);
             Directory.Delete($"{getPathToApp(appName)}/{DIB_DIRECTORY_RELATIVE_PATH}", true);
-            File.Delete($"{getPathToApp(appName)}/{DIBRM_FILE_RELATIVE_PATH}");
         }
     }
 }
