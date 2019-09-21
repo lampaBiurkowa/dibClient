@@ -10,7 +10,8 @@ namespace DibClient
 {
     public static class DibClient
     {
-        const string DIBMD_FILE_RELATIVE_PATH = ".dib/.dibmd";
+        const string DIB_DIRECTORY_RELATIVE_PATH = ".dib";
+        const string DIBMD_FILE_RELATIVE_PATH = DIB_DIRECTORY_RELATIVE_PATH + "/.dibmd";
         const string DIBRM_FILE_RELATIVE_PATH = ".dibrm";
         const string DIBVER_FILE_PATH = ".dibver";
 
@@ -42,27 +43,22 @@ namespace DibClient
 
         static async Task update(string uri, string appName, bool force)
         {
-            System.Console.WriteLine(uri);
             try
             {
                 byte[] responseBody = await httpClient.GetByteArrayAsync(uri);
                 MemoryStream stream = new MemoryStream(responseBody);
                 ZipArchive zipArchive = new ZipArchive(stream);
 
-                System.Console.WriteLine("b");
                 string destinationPath = getPathToUpdatePack(appName);
                 if (Directory.Exists(destinationPath))
                     Directory.Delete(destinationPath, true);
-                System.Console.WriteLine("b2");
                 zipArchive.ExtractToDirectory(destinationPath);
-                System.Console.WriteLine("c");
 
                 stream.Dispose();
 
                 install(appName, force);
-                System.Console.WriteLine("d");
                 updateAppVersion(appName);
-                System.Console.WriteLine("e");
+                removeInstallationFiles(appName);
             }
             catch (HttpRequestException e)
             {
@@ -110,17 +106,9 @@ namespace DibClient
 
         static void removeUnnecessaryFiles(string appName)
         {
-            string[] filesToRemovePaths = File.ReadAllLines(getPathToDIBRMFile(appName));
+            string[] filesToRemovePaths = File.ReadAllLines($"{getPathToUpdatePack(appName)}/{DIBRM_FILE_RELATIVE_PATH}");
             foreach (string path in filesToRemovePaths)
-            {
-                System.Console.WriteLine(path);
                 File.Delete($"{getPathToApp(appName)}/{path}");
-            }
-        }
-
-        static string getPathToDIBRMFile(string appName)
-        {
-            return $"{getPathToUpdatePack(appName)}/{DIBRM_FILE_RELATIVE_PATH}";
         }
 
         static void copyNecesseryFiles(string appName)
@@ -157,14 +145,9 @@ namespace DibClient
 
         static int getVersion(string appName)
         {
-            string pathToDIBMD = getPathToDIBMDFile(appName);
+            string pathToDIBMD = $"{getPathToApp(appName)}/{DIBMD_FILE_RELATIVE_PATH}";
             IntPtr DIBMDHandler = CreateDIBMDHandlerClass(pathToDIBMD);
             return GetRepoVersion(DIBMDHandler);
-        }
-
-        static string getPathToDIBMDFile(string appName)
-        {
-            return $"{getPathToApp(appName)}/{DIBMD_FILE_RELATIVE_PATH}";
         }
 
         [DllImport("DIBMDHandler.dll")]
@@ -172,5 +155,12 @@ namespace DibClient
 
         [DllImport("DIBMDHandler.dll")]
         static public extern int GetRepoVersion(IntPtr DIBMDHandlerObject);
+
+        static void removeInstallationFiles(string appName)
+        {
+            Directory.Delete(ZIPS_DIRECTORY_PATH, true);
+            Directory.Delete($"{getPathToApp(appName)}/{DIB_DIRECTORY_RELATIVE_PATH}", true);
+            File.Delete($"{getPathToApp(appName)}/{DIBRM_FILE_RELATIVE_PATH}");
+        }
     }
 }
