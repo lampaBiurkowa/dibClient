@@ -106,7 +106,11 @@ namespace DibClient
 
         static void removeUnnecessaryFiles(string appName)
         {
-            string[] filesToRemovePaths = File.ReadAllLines($"{getPathToUpdatePack(appName)}/{DIBRM_FILE_RELATIVE_PATH}");
+            string pathToDIBRM = $"{getPathToUpdatePack(appName)}/{DIBRM_FILE_RELATIVE_PATH}";
+            if (!File.Exists(pathToDIBRM))
+                return;
+
+            string[] filesToRemovePaths = File.ReadAllLines(pathToDIBRM);
             foreach (string path in filesToRemovePaths)
                 File.Delete($"{getPathToApp(appName)}/{path}");
         }
