@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
-using System.Net.Http;
+using System.Net;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
-
-using System.Net;
 
 namespace DibClient
 {
@@ -21,8 +19,10 @@ namespace DibClient
         const string UPDATER_DIRECTORY_PATH = "dibUpdater";
 
         static Dictionary<string, int> versionsData = new Dictionary<string, int>();
-        static readonly HttpClient httpClient = new HttpClient();
         static readonly WebClient webClient = new WebClient();
+
+        public delegate void OnPercentageChanged(int percentage);
+        public static event OnPercentageChanged PercentageChanged;
 
         static DibClient()
         {
@@ -46,14 +46,12 @@ namespace DibClient
 
         static async Task update(string uri, string appName, bool force)
         {
-            int progressPercentage = 0;
             try
             {
-                webClient.DownloadProgressChanged += (s, e) => progressPercentage = e.ProgressPercentage;
-                webClient.DownloadFileCompleted += (s, e) => progressPercentage = 100;
+                webClient.DownloadProgressChanged += onDownloadProgressChanged;
 
                 string downloadedZipPath = getDownloadedZipDestinationPath(appName);
-                webClient.DownloadFileAsync(new Uri(uri), downloadedZipPath);
+                await webClient.DownloadFileTaskAsync(new Uri(uri), downloadedZipPath);
 
                 string destinationPath = getPathToUpdatePack(appName);
                 if (Directory.Exists(destinationPath))
@@ -64,10 +62,15 @@ namespace DibClient
                 updateAppVersion(appName);
                 removeInstallationFiles(appName);
             }
-            catch (HttpRequestException e)
+            catch
             {
-                System.Console.WriteLine($"zal :{e.Message}");
+                System.Console.WriteLine($"zal");
             }
+        }
+
+        static void onDownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        {
+            PercentageChanged?.Invoke(e.ProgressPercentage);
         }
 
         static string getDownloadedZipDestinationPath(string appName)
