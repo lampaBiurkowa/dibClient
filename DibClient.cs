@@ -6,6 +6,8 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
+using System.Net;
+
 namespace DibClient
 {
     public static class DibClient
@@ -16,18 +18,19 @@ namespace DibClient
         const string DIBVER_FILE_PATH = ".dibver";
 
         const string APPS_DIRECTORY_PATH = "dibApps";
-        const string ZIPS_DIRECTORY_PATH = "dibUpdater";
+        const string UPDATER_DIRECTORY_PATH = "dibUpdater";
 
         static Dictionary<string, int> versionsData = new Dictionary<string, int>();
         static readonly HttpClient httpClient = new HttpClient();
+        static readonly WebClient webClient = new WebClient();
 
         static DibClient()
         {
             if (!Directory.Exists(APPS_DIRECTORY_PATH))
                 Directory.CreateDirectory(APPS_DIRECTORY_PATH);
 
-            if (!Directory.Exists(ZIPS_DIRECTORY_PATH))
-                Directory.CreateDirectory(ZIPS_DIRECTORY_PATH);
+            if (!Directory.Exists(UPDATER_DIRECTORY_PATH))
+                Directory.CreateDirectory(UPDATER_DIRECTORY_PATH);
 
             versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
         }
@@ -43,19 +46,20 @@ namespace DibClient
 
         static async Task update(string uri, string appName, bool force)
         {
+            int progressPercentage = 0;
             try
             {
-                byte[] responseBody = await httpClient.GetByteArrayAsync(uri);
-                MemoryStream stream = new MemoryStream(responseBody);
-                ZipArchive zipArchive = new ZipArchive(stream);
+                webClient.DownloadProgressChanged += (s, e) => progressPercentage = e.ProgressPercentage;
+                webClient.DownloadFileCompleted += (s, e) => progressPercentage = 100;
+
+                string downloadedZipPath = getDownloadedZipDestinationPath(appName);
+                webClient.DownloadFileAsync(new Uri(uri), downloadedZipPath);
 
                 string destinationPath = getPathToUpdatePack(appName);
                 if (Directory.Exists(destinationPath))
                     Directory.Delete(destinationPath, true);
-                zipArchive.ExtractToDirectory(destinationPath);
 
-                stream.Dispose();
-
+                ZipFile.ExtractToDirectory(downloadedZipPath, destinationPath);
                 install(appName, force);
                 updateAppVersion(appName);
                 removeInstallationFiles(appName);
@@ -66,9 +70,14 @@ namespace DibClient
             }
         }
 
+        static string getDownloadedZipDestinationPath(string appName)
+        {
+            return $"{UPDATER_DIRECTORY_PATH}/{appName}.zip";
+        }
+
         static string getPathToUpdatePack(string appName)
         {
-            return $"{ZIPS_DIRECTORY_PATH}/{appName}";
+            return $"{UPDATER_DIRECTORY_PATH}/{appName}";
         }
 
         public static async Task UpdateToVersion(string appName, int targetVersion, bool force = false)
@@ -162,7 +171,7 @@ namespace DibClient
 
         static void removeInstallationFiles(string appName)
         {
-            Directory.Delete(ZIPS_DIRECTORY_PATH, true);
+            Directory.Delete(UPDATER_DIRECTORY_PATH, true);
             Directory.Delete($"{getPathToApp(appName)}/{DIB_DIRECTORY_RELATIVE_PATH}", true);
         }
     }
