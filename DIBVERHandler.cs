@@ -40,6 +40,9 @@ namespace DibClient
 
         public static void SaveVersionsData(string path, Dictionary<string, int> versionsData)
         {
+            if (!File.Exists(path))
+                File.WriteAllText(path, "");
+
             List<string> entries = new List<string>();
 
             foreach (KeyValuePair<string, int> pair in versionsData)
