@@ -66,10 +66,10 @@ namespace DibClient
                 updateAppVersion();
                 removeInstallationFiles();
             }
-           // catch
-            //{
+            //catch
+            {
                 System.Console.WriteLine($"zal");
-            //}
+            }
         }
 
         void onDownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
