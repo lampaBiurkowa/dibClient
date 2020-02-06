@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
@@ -23,25 +24,31 @@ namespace DibClient
 
         public delegate void OnPercentageChanged(string appName, int percentage);
         public static event OnPercentageChanged PercentageChanged;
+        public delegate void OnInstalled(string appName);
+        public static event OnInstalled Installed;
 
         string appName;
+        static HttpClient httpClient = new HttpClient();
 
         public DibClient(string appName)
         {
             this.appName = appName;
+        }
 
+        void createResourcesIfDoesntExist()
+        {
             if (!Directory.Exists(APPS_DIRECTORY_PATH))
                 Directory.CreateDirectory(APPS_DIRECTORY_PATH);
 
             if (!Directory.Exists(UPDATER_DIRECTORY_PATH))
                 Directory.CreateDirectory(UPDATER_DIRECTORY_PATH);
-
-            versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
         }
 
         public async Task UpdateToMaster(bool force = false)
         {
-            string uri = $"https://localhost:5001/api/dibDownload/{appName}";
+            createResourcesIfDoesntExist();
+
+            string uri = $"http://caps.fail:5000/api/dibDownload/{appName}";
             if (!force && versionsData.ContainsKey(appName))
                 uri += $"/master/{versionsData[appName]}";
             
@@ -65,6 +72,7 @@ namespace DibClient
                 install(force);
                 updateAppVersion();
                 removeInstallationFiles();
+                Installed?.Invoke(appName);
             }
             //catch
             {
@@ -89,7 +97,10 @@ namespace DibClient
 
         public async Task UpdateToVersion(int targetVersion, bool force = false)
         {
-            string uri = $"https://localhost:5001/api/dibDownload/{appName}/{targetVersion}";
+            createResourcesIfDoesntExist();
+
+            string uri = $"http://caps.fail:5000/api/dibDownload/{appName}/{targetVersion}";
+            versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
             if (!force && versionsData.ContainsKey(appName))
                 uri += $"/{versionsData[appName]}";
 
@@ -147,7 +158,7 @@ namespace DibClient
         {
             if (!Directory.Exists(Path.GetDirectoryName(path)))
                 createDirectoryFromPath(Path.GetDirectoryName(path));
-            
+
             Directory.CreateDirectory(path);
         }
 
@@ -155,6 +166,7 @@ namespace DibClient
         {
             int currentVersion = getVersion();
 
+            versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
             if (versionsData.ContainsKey(appName))
                 versionsData[appName] = currentVersion;
             else
@@ -198,6 +210,25 @@ namespace DibClient
                 versionsData.Remove(appName);
 
             DIBVERHandler.SaveVersionsData(DIBVER_FILE_PATH, versionsData);
+        }
+
+        public bool IsUpdateAvailable()
+        {
+            string uri = $"http://caps.fail:5000/api/dibInfo/GetVersionInfo/{appName}";
+            string versionStr = httpClient.GetStringAsync(uri).Result;
+            int versionNumber = int.Parse(versionStr);
+
+            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            if (versionsData.ContainsKey(appName))
+                return !(versionNumber == versionsData[appName]);
+
+            return false;
+        }
+
+        public bool IsInstalled()
+        {
+            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            return versionsData.ContainsKey(appName);
         }
     }
 }

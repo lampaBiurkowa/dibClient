@@ -69,7 +69,9 @@ namespace DibClient
             foreach (KeyValuePair<string, int> pair in versionsData)
                content += $"{pair.Key}{SEPARATOR}{pair.Value}\n";
 
+            System.Console.WriteLine($"fdsDFSADFSFDSA {content}");
             string encodedContent = Encoder.Encode(content, getEncodingPassword(), getEncodingParameter());
+            System.Console.WriteLine($"fdsDFSADFSFDSA {encodedContent}");
 
             File.WriteAllText(path, encodedContent);
         }
