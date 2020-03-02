@@ -4,41 +4,40 @@ using System.IO;
 using System.IO.Compression;
 using System.Net;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace DibClient
 {
-    public class DibClient
+    public class DibClientReader
     {
-        const string DIB_DIRECTORY_RELATIVE_PATH = ".dib";
-        const string DIBMD_FILE_RELATIVE_PATH = DIB_DIRECTORY_RELATIVE_PATH + "/.dibmd";
-        const string DIBRM_FILE_RELATIVE_PATH = DIB_DIRECTORY_RELATIVE_PATH + "/.dibrm";
-        const string DIBVER_FILE_PATH = ".dibver";
-
         const string APPS_DIRECTORY_PATH = "dibApps";
         const string UPDATER_DIRECTORY_PATH = "dibUpdater";
 
         Dictionary<string, int> versionsData = new Dictionary<string, int>();
         readonly WebClient webClient = new WebClient();
 
+        public delegate void OnFileSizeInfoGet(long bytes);
+        public static event OnFileSizeInfoGet FileSizeInfoGet;
         public delegate void OnPercentageChanged(string appName, int percentage);
         public static event OnPercentageChanged PercentageChanged;
         public delegate void OnInstalled(string appName);
         public static event OnInstalled Installed;
 
         string appName;
+        string appDirectoryPath;
+        bool fileSizeInfoGet = false;
         static HttpClient httpClient = new HttpClient();
 
-        public DibClient(string appName)
+        public DibClientReader(string appName, string appDirectoryPath = APPS_DIRECTORY_PATH)
         {
             this.appName = appName;
+            this.appDirectoryPath = appDirectoryPath;
         }
 
         void createResourcesIfDoesntExist()
         {
-            if (!Directory.Exists(APPS_DIRECTORY_PATH))
-                Directory.CreateDirectory(APPS_DIRECTORY_PATH);
+            if (!Directory.Exists(appDirectoryPath))
+                Directory.CreateDirectory(appDirectoryPath);
 
             if (!Directory.Exists(UPDATER_DIRECTORY_PATH))
                 Directory.CreateDirectory(UPDATER_DIRECTORY_PATH);
@@ -57,7 +56,7 @@ namespace DibClient
 
         async Task update(string uri, bool force)
         {
-            //try
+            ////try
             {
                 webClient.DownloadProgressChanged += onDownloadProgressChanged;
 
@@ -73,6 +72,7 @@ namespace DibClient
                 updateAppVersion();
                 removeInstallationFiles();
                 Installed?.Invoke(appName);
+                fileSizeInfoGet = false;
             }
             //catch
             {
@@ -82,6 +82,12 @@ namespace DibClient
 
         void onDownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
+            if (!fileSizeInfoGet)
+            {
+                FileSizeInfoGet?.Invoke(e.TotalBytesToReceive);
+                fileSizeInfoGet = true;
+            }
+
             PercentageChanged?.Invoke(appName, e.ProgressPercentage);
         }
 
@@ -100,7 +106,7 @@ namespace DibClient
             createResourcesIfDoesntExist();
 
             string uri = $"http://caps.fail:5000/api/dibDownload/{appName}/{targetVersion}";
-            versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            versionsData = DIBVERHandler.GetVersionsData(Paths.DIBVER_FILE_PATH);
             if (!force && versionsData.ContainsKey(appName))
                 uri += $"/{versionsData[appName]}";
 
@@ -122,7 +128,7 @@ namespace DibClient
 
         string getPathToApp()
         {
-            return $"{APPS_DIRECTORY_PATH}/{appName}";
+            return $"{appDirectoryPath}/{appName}";
         }
 
         void clearAppDirectory()
@@ -133,7 +139,7 @@ namespace DibClient
 
         void removeUnnecessaryFiles()
         {
-            string pathToDIBRM = $"{getPathToUpdatePack()}/{DIBRM_FILE_RELATIVE_PATH}";
+            string pathToDIBRM = $"{getPathToUpdatePack()}/{Paths.DIBRM_FILE_RELATIVE_PATH}";
             if (!File.Exists(pathToDIBRM))
                 return;
 
@@ -166,68 +172,60 @@ namespace DibClient
         {
             int currentVersion = getVersion();
 
-            versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            versionsData = DIBVERHandler.GetVersionsData(Paths.DIBVER_FILE_PATH);
             if (versionsData.ContainsKey(appName))
                 versionsData[appName] = currentVersion;
             else
                 versionsData.Add(appName, currentVersion);
 
-            DIBVERHandler.SaveVersionsData(DIBVER_FILE_PATH, versionsData);
+            DIBVERHandler.SaveVersionsData(Paths.DIBVER_FILE_PATH, versionsData);
         }
 
         int getVersion()
         {
-            string pathToDIBMD = $"{getPathToApp()}/{DIBMD_FILE_RELATIVE_PATH}";
-            IntPtr DIBMDHandler = CreateDIBMDHandlerClass(pathToDIBMD);
-            return GetRepoVersion(DIBMDHandler);
+            string pathToDIBMD = $"{getPathToApp()}/{Paths.DIBMD_FILE_RELATIVE_PATH}";
+            DIBMDHandler handler = new DIBMDHandler(pathToDIBMD);
+            return handler.GetVersion();
         }
-
-        [DllImport("DIBMDHandler.dll")]
-        static extern IntPtr CreateDIBMDHandlerClass(string path);
-
-        [DllImport("DIBMDHandler.dll")]
-        static extern int GetRepoVersion(IntPtr DIBMDHandlerObject);
 
         void removeInstallationFiles()
         {
             Directory.Delete(UPDATER_DIRECTORY_PATH, true);
-            Directory.Delete($"{getPathToApp()}/{DIB_DIRECTORY_RELATIVE_PATH}", true);
+            Directory.Delete($"{getPathToApp()}/{Paths.DIB_DIRECTORY_RELATIVE_PATH}", true);
         }
 
-        public void Uninstall()
+        public async Task Uninstall()
         {
             removeAppFromDIBVERFile();
             if (Directory.Exists(getPathToApp()))
                 Directory.Delete(getPathToApp(), true);
-
-            Directory.Delete(UPDATER_DIRECTORY_PATH, true);
         }
 
         void removeAppFromDIBVERFile()
         {
-            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(Paths.DIBVER_FILE_PATH);
             if (versionsData.ContainsKey(appName))
                 versionsData.Remove(appName);
 
-            DIBVERHandler.SaveVersionsData(DIBVER_FILE_PATH, versionsData);
+            DIBVERHandler.SaveVersionsData(Paths.DIBVER_FILE_PATH, versionsData);
         }
 
-        public bool IsUpdateAvailable()
+        public async Task<bool> IsUpdateAvailable()
         {
             string uri = $"http://caps.fail:5000/api/dibInfo/GetVersionInfo/{appName}";
-            string versionStr = httpClient.GetStringAsync(uri).Result;
+            string versionStr = await httpClient.GetStringAsync(uri);
             int versionNumber = int.Parse(versionStr);
 
-            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(Paths.DIBVER_FILE_PATH);
             if (versionsData.ContainsKey(appName))
                 return !(versionNumber == versionsData[appName]);
 
             return false;
         }
 
-        public bool IsInstalled()
+        public async Task<bool> IsInstalled()
         {
-            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(DIBVER_FILE_PATH);
+            Dictionary<string, int> versionsData = DIBVERHandler.GetVersionsData(Paths.DIBVER_FILE_PATH);
             return versionsData.ContainsKey(appName);
         }
     }
